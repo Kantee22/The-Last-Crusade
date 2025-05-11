@@ -13,7 +13,7 @@ from groups import AllSprites
 from player import Player
 from sprites import Enemy, Sprite, CollisionSprite
 import csv, os
-from datetime import datetime      # ⬅ เพิ่ม
+from datetime import datetime
 
 CSV_PATH = "runs.csv"
 
@@ -26,7 +26,7 @@ class Game:
         pygame.display.set_caption("The Last Crusade")
         self.clock = pygame.time.Clock()
         self.running = True
-        self.player_name = player_name  # ⬅ เก็บไว้
+        self.player_name = player_name
         self.start_time = pygame.time.get_ticks()
 
         self.miniboss_spawned = False
@@ -217,7 +217,7 @@ class Game:
 
             if self.miniboss and self.miniboss.is_dead and self.miniboss_spawned:
                 self.miniboss_spawned = False
-                self.miniboss_defeated = True  # ★ เคยกำจัดแล้ว
+                self.miniboss_defeated = True
                 self.miniboss = None
 
             # ถ้า player ถึง LV 10 แล้วยังไม่ได้เรียกมินิบอส → สปอว์น
@@ -234,7 +234,7 @@ class Game:
                     self.arrow_sprites,
                     self.enemy_sprites,
                     False, False,
-                    self.collide_hitbox  # ← อ้างผ่าน self
+                    self.collide_hitbox
             ).items():
                 dmg_each = arrow.damage if getattr(arrow, "damage", 0) else base
                 for e in enemies:
@@ -334,7 +334,7 @@ class Game:
         pygame.display.update()
         pygame.time.delay(2000)
 
-    def show_class_menu(self, screen):      # ← เพิ่ม self
+    def show_class_menu(self, screen):
         font = pygame.font.SysFont(None, 70)
         knight_btn  = pygame.Rect(0, 0, 300, 90)
         knight_btn.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 120)
@@ -436,7 +436,7 @@ def show_menu(screen):
         if bg_image:
             screen.blit(bg_image, (0, 0))
         else:
-            screen.fill((50, 50, 50))  # สีเทาถ้าไม่เจอรูป
+            screen.fill((50, 50, 50))
 
         # วาดปุ่ม Play
         pygame.draw.rect(screen, (200, 200, 200), play_rect)

@@ -2,7 +2,7 @@ import pygame, os, math
 from os.path import join, exists
 from os import walk
 from random import randint
-import settings                 #  ←  เพิ่มบรรทัดนี้
+import settings
 from settings import (
     WINDOW_WIDTH, WINDOW_HEIGHT,
     EXP_BASE, EXP_GROWTH_RATE,
@@ -122,8 +122,8 @@ class Player(pygame.sprite.Sprite):
     #      LOAD SPRITE SHEETS ตาม 'job' ปัจจุบัน
     # --------------------------------------------
     def load_player_images(self, job: str = None):
-        job = job or self.job  # ถ้าไม่ระบุ ใช้ self.job
-        base_folder = join('images', job)  # เปลี่ยนจาก fix เป็นตัวแปร
+        job = job or self.job
+        base_folder = join('images', job)
         scale_factor = 2.0
 
         for state in self.animations.keys():

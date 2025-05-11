@@ -60,7 +60,7 @@ class Enemy(pygame.sprite.Sprite):
         else:
             # ศัตรูทั่วไป
             self.dmg_normal = base_dmg + DMG_PER_LEVEL * (level - 1)
-            self.dmg_special = self.dmg_normal  # เผื่ออนาคต
+            self.dmg_special = self.dmg_normal
 
         self.last_attack_time = 0
         self.attack_delay = 600
