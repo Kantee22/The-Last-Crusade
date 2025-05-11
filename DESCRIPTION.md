@@ -7,7 +7,7 @@
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Key Features](#key-features)
+2. [Key Features](#Key Features)
 3. [Gameplay Mechanics](#gameplay-mechanics)
 4. [Player Classes & Progression](#player-classes--progression)
 5. [Enemy & Boss AI](#enemy--boss-ai)
@@ -100,7 +100,7 @@ Players must master both melee and ranged combat while managing cooldowns, level
 
 ## UML Class Diagram
 
-<img src="docs/uml/class_diagram.png" alt="UML Class Diagram" width="600">
+![img_1.png](img_1.png)
 
 ---
 
@@ -122,5 +122,7 @@ Players must master both melee and ranged combat while managing cooldowns, level
 * **Audio**: Dynamic soundtrack and voice-over cues.
 
 ---
+## 📂 Project Links
 
-*Generated on May 11, 2025*
+- **GitHub Repository:** [https://github.com/Kantee22/The-Last-Crusade/tree/main](https://github.com/Kantee22/The-Last-Crusade/tree/main)
+- **Project Proposal:** [https://docs.google.com/document/d/1YDT66A1HK4TPbdzK42oawEV7-aXaO5UC/edit?tab=t.0#heading=h.gjdgxs](https://docs.google.com/document/d/1YDT66A1HK4TPbdzK42oawEV7-aXaO5UC/edit?tab=t.0#heading=h.gjdgxs)
