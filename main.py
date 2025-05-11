@@ -3,22 +3,45 @@ import sys
 from os.path import join
 from random import choice
 from pytmx.util_pygame import load_pygame
-
-from settings import WINDOW_WIDTH, WINDOW_HEIGHT, TILE_SIZE
+import random
+from settings import (
+    WINDOW_WIDTH, WINDOW_HEIGHT, TILE_SIZE,ARROW_BASE_DMG,ARROW_DMG_PER_LEVEL,
+    MINIBOSS_DMG, MINIBOSS_HP, MINIBOSS_EXP, MINIBOSS_NAME, MINIBOSS_IMG_PATH, MINIBOSS_TRIGGER_LEVEL
+    ,GAME_TIME_LIMIT, WEREWOLF_HP, WEREWOLF_DMG, WEREWOLF_EXP, WEREWOLF_NAME, WEREWOLF_IMG_PATH, WEREWOLF_TRIGGER_LV,
+    WEREWOLF_SPECIAL_CD, ELITE_HP, ELITE_DMG, ELITE_EXP, ELITE_NAME, ELITE_IMG_PATH, ELITE_TRIGGER_LV, ELITE_SPECIAL_CD)
 from groups import AllSprites
 from player import Player
 from sprites import Enemy, Sprite, CollisionSprite
+import csv, os
+from datetime import datetime      # ⬅ เพิ่ม
 
+CSV_PATH = "runs.csv"
 
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, player_name):
         pygame.init()
         self.display_surface = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("The Last Crusade")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.player_name = player_name  # ⬅ เก็บไว้
+        self.start_time = pygame.time.get_ticks()
+
+        self.miniboss_spawned = False
+        self.miniboss = None
+        self.miniboss_defeated = False
+
+        self.miniboss2_spawned = False
+        self.miniboss2 = None
+        self.elite_spawned = False
+        self.elite = None
+
+        self.class_chosen = False
+        self.showing_class_menu = False
+
+        self.start_time = pygame.time.get_ticks()
 
         # sprite groups
         self.all_sprites = AllSprites()
@@ -33,9 +56,9 @@ class Game:
 
         # enemy data (three example types)
         self.enemy_data = {
-            'slime': {'hp':50, 'path':'images/enemies/slime'},
-            'skeleton': {'hp':100, 'path':'images/enemies/skeleton'},
-            'orc': {'hp':150, 'path':'images/enemies/orc'},
+            'slime': {'hp': 50, 'dmg': 5, 'exp': 25, 'path': 'images/enemies/slime'},
+            'skeleton': {'hp': 90, 'dmg': 10, 'exp': 40, 'path': 'images/enemies/skeleton'},
+            'orc': {'hp': 150, 'dmg': 15, 'exp': 75, 'path': 'images/enemies/orc'},
         }
 
         self.setup_map()
@@ -71,25 +94,87 @@ class Game:
             else:
                 self.spawn_positions.append((obj.x,obj.y))
 
+    @staticmethod
+    def collide_hitbox(sprite_a, sprite_b):
+        return sprite_a.hitbox_rect.colliderect(sprite_b.hitbox_rect)
+
     def spawn_enemy(self):
-        """
-        Choose random type from self.enemy_data, random spawn pos,
-        create Enemy.
-        """
+        """สุ่มสร้างศัตรูธรรมดา ถ้าไม่มีบอสมีชีวิตอยู่"""
+        # --- ถ้ามีมินิบอส/Boss ตัวใดยังไม่ตาย → ไม่สปอว์น ---
+        if (self.miniboss and not self.miniboss.is_dead) \
+                or (self.miniboss2 and not self.miniboss2.is_dead) \
+                or (self.elite and not self.elite.is_dead):
+            return
         if not self.spawn_positions:
             return
-        t = choice(list(self.enemy_data.keys()))
-        data = self.enemy_data[t]
-        pos = choice(self.spawn_positions)
+
+        pos   = random.choice(self.spawn_positions)
+        etype = random.choice(list(self.enemy_data.keys()))
+        data  = self.enemy_data[etype]
+
+        # เลเวลใกล้ผู้เล่น (±1) อย่างน้อย 1
+        player_lvl = self.player.level
+        level = random.randint(max(1, player_lvl - 1), player_lvl + 1)
+
         Enemy(
-            pos = pos,
-            enemy_type = t,
-            hp = data['hp'],
-            path = data['path'],
-            groups = (self.all_sprites, self.enemy_sprites),
+            pos      = pos,
+            enemy_type = etype,
+            level    = level,
+            exp_reward=data['exp'],
+            base_hp  = data['hp'],
+            base_dmg = data['dmg'],
+            path     = data['path'],
+            groups   = (self.all_sprites, self.enemy_sprites),
             collision_sprites = self.collision_sprites,
-            player = self.player
+            player   = self.player
         )
+
+    def spawn_miniboss(self):
+        """สปอว์นมินิบอสครั้งเดียว แล้วลบศัตรูอื่นออก"""
+        self.miniboss_spawned = True
+
+        # ลบศัตรูปกติทั้งหมด
+        for e in list(self.enemy_sprites):
+            e.kill()
+
+        # ตำแหน่งเกิด – หา spawn point ที่ใกล้ผู้เล่น (< 500px) ไม่ก็กลางจอ
+        near = [p for p in self.spawn_positions
+                if pygame.Vector2(p).distance_to(self.player.rect.center) < 500]
+        pos = choice(near) if near else (self.player.rect.centerx + 150, self.player.rect.centery)
+
+        # สร้างมินิบอส
+        self.miniboss = Enemy(
+            pos=pos, enemy_type='miniboss', level=self.player.level,
+            base_hp=MINIBOSS_HP, base_dmg=MINIBOSS_DMG,
+            path=MINIBOSS_IMG_PATH,
+            groups=(self.all_sprites, self.enemy_sprites),
+            collision_sprites=self.collision_sprites,
+            player=self.player,
+            exp_reward=MINIBOSS_EXP,
+            is_miniboss=True
+        )
+
+    def spawn_boss(self, name, hp, dmg, exp, path,
+                   special_cd=0, dmg_special=0,  # ★ ค่าปริยาย
+                   is_miniboss=False, is_elite=False):
+
+        # เคลียร์ศัตรูธรรมดาทั้งหมด
+        for e in list(self.enemy_sprites):
+            e.kill()
+
+        boss = Enemy(
+            self.player.rect.center + pygame.Vector2(250, 0),
+            name.lower(), self.player.level,
+            hp, dmg, path,
+            (self.all_sprites, self.enemy_sprites),
+            self.collision_sprites, self.player,
+            exp, is_miniboss or is_elite
+        )
+        # ---------- กำหนดสกิล ----------
+        boss.special_cd = special_cd
+        boss.dmg_special = dmg_special
+        boss.last_special = -9999
+        return boss
 
     def run(self):
         while self.running:
@@ -102,37 +187,124 @@ class Game:
 
             self.all_sprites.update(dt)
 
+            elapsed_sec = (pygame.time.get_ticks() - self.start_time) // 1000
+            elapsed_sec = (pygame.time.get_ticks() - self.start_time) // 1000
+            lv_cond = self.player.level >= ELITE_TRIGGER_LV  # เลเวล 30 ขึ้นไป
+            time_cond = elapsed_sec >= GAME_TIME_LIMIT  # หรือครบ 10 นาที
+
+            # --- Mini-boss #1 (เดิม) ---
+            if not self.miniboss_spawned and not self.miniboss_defeated \
+                    and self.player.level >= MINIBOSS_TRIGGER_LEVEL:
+                self.miniboss = self.spawn_boss(MINIBOSS_NAME, MINIBOSS_HP,
+                                                MINIBOSS_DMG, MINIBOSS_EXP,
+                                                MINIBOSS_IMG_PATH, is_miniboss=True)
+                self.miniboss_spawned = True
+
+            if not self.miniboss2_spawned and self.player.level >= WEREWOLF_TRIGGER_LV:
+                self.miniboss2 = self.spawn_boss(
+                    WEREWOLF_NAME, WEREWOLF_HP, WEREWOLF_DMG, WEREWOLF_EXP,
+                    WEREWOLF_IMG_PATH, WEREWOLF_SPECIAL_CD, WEREWOLF_DMG * 2,
+                    is_miniboss=True)
+                self.miniboss2_spawned = True
+
+            # Elite Orc  (LV30 หรือ 10 นาที)
+            if not self.elite_spawned and (lv_cond or time_cond):
+                self.elite = self.spawn_boss(
+                    ELITE_NAME, ELITE_HP, ELITE_DMG, ELITE_EXP,
+                    ELITE_IMG_PATH, ELITE_SPECIAL_CD, ELITE_DMG * 2.5,
+                    is_elite=True)
+                self.elite_spawned = True
+
+            if self.miniboss and self.miniboss.is_dead and self.miniboss_spawned:
+                self.miniboss_spawned = False
+                self.miniboss_defeated = True  # ★ เคยกำจัดแล้ว
+                self.miniboss = None
+
+            # ถ้า player ถึง LV 10 แล้วยังไม่ได้เรียกมินิบอส → สปอว์น
+            if (
+                    not self.miniboss_spawned
+                    and not self.miniboss_defeated
+                    and self.player.level >= MINIBOSS_TRIGGER_LEVEL
+            ):
+                self.spawn_miniboss()
+
             # arrow vs enemy collisions
-            collisions = pygame.sprite.groupcollide(
-                self.arrow_sprites, self.enemy_sprites,
-                False, False, pygame.sprite.collide_mask
-            )
-            for arrow, enemies in collisions.items():
+            base = ARROW_BASE_DMG + (self.player.level - 1) * ARROW_DMG_PER_LEVEL
+            for arrow, enemies in pygame.sprite.groupcollide(
+                    self.arrow_sprites,
+                    self.enemy_sprites,
+                    False, False,
+                    self.collide_hitbox  # ← อ้างผ่าน self
+            ).items():
+                dmg_each = arrow.damage if getattr(arrow, "damage", 0) else base
                 for e in enemies:
-                    e.take_damage(50)
+                    e.take_damage(dmg_each)
                 arrow.kill()
 
-            # player vs enemy
-            hits = pygame.sprite.spritecollide(self.player, self.enemy_sprites, False, pygame.sprite.collide_mask)
-            if hits:
-                now = pygame.time.get_ticks()
-                if now - self.player.last_damage_time >= self.player.damage_cooldown:
-                    self.player.take_damage(10)
-                    self.player.last_damage_time = now
+            if not self.class_chosen and self.player.level >= 15 and not self.showing_class_menu:
+                self.showing_class_menu = True
+                choice = self.show_class_menu(self.display_surface)
+                self.player.change_job(choice)
+                self.class_chosen = True
+                self.showing_class_menu = False
 
             # check if player is dead
             if self.player.is_dead and self.player.death_done:
                 self.show_game_over()
+                self._log_run(False)
                 self.running=False
+
+            if self.elite and self.elite.is_dead:
+                self.show_victory()
+                self._log_run(True)
+                self.running = False
 
             # draw
             self.display_surface.fill('black')
             self.all_sprites.draw(self.player.hitbox_rect.center)
+            self.draw_boss_hud()
+            self.draw_timer()
             self.draw_health_bar()
             pygame.display.update()
 
         pygame.quit()
         sys.exit()
+
+    def show_victory(self):
+        font = pygame.font.SysFont(None, 60)
+        msg = font.render("Glory to the Victor – The Crusade Ends in Light", True, (255, 255, 0))
+        r = msg.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+        self.display_surface.fill('black')
+        self.display_surface.blit(msg, r)
+        pygame.display.update()
+        pygame.time.delay(4000)
+
+    def draw_timer(self):
+        elapsed = (pygame.time.get_ticks() - self.start_time) // 1000
+        mins, secs = divmod(elapsed, 60)
+        txt = f"{mins:02}:{secs:02}"
+        font = pygame.font.SysFont(None, 40)
+        surf = font.render(txt, True, (255, 255, 255))
+        self.display_surface.blit(surf, surf.get_rect(topright=(WINDOW_WIDTH - 20, 20)))
+
+    def draw_boss_hud(self):
+        boss = self.elite or self.miniboss2 or self.miniboss
+        if not boss or boss.is_dead:
+            return
+
+        # ---------- พารามิเตอร์หลอด ----------
+        bar_w, bar_h = 500, 24
+        x = (WINDOW_WIDTH - bar_w) // 2
+        y = WINDOW_HEIGHT - bar_h - 30
+        ratio = max(boss.hp, 0) / boss.max_hp
+
+        # ---------- วาด ----------
+        pygame.draw.rect(self.display_surface, (50, 50, 50), (x, y, bar_w, bar_h))
+        pygame.draw.rect(self.display_surface, (200, 0, 0), (x, y, bar_w * ratio, bar_h))
+
+        font = pygame.font.SysFont(None, 30)
+        name_surf = font.render(boss.type.upper(), True, (255, 255, 255))
+        self.display_surface.blit(name_surf, name_surf.get_rect(midbottom=(WINDOW_WIDTH // 2, y - 6)))
 
     def draw_health_bar(self):
         bw = 300
@@ -144,6 +316,15 @@ class Game:
         pygame.draw.rect(self.display_surface,(50,50,50),(x,y,bw,bh))
         pygame.draw.rect(self.display_surface,(200,0,0),(x,y,cw,bh))
 
+        bar_w, bar_h = 200, 18
+        x, y = 20, 60
+        ratio = self.player.exp / self.player.exp_needed
+        pygame.draw.rect(self.display_surface, (40, 40, 40), (x, y, bar_w, bar_h))
+        pygame.draw.rect(self.display_surface, (0, 120, 255), (x, y, bar_w * ratio, bar_h))
+        font = pygame.font.SysFont(None, 26)  # local
+        lvl_txt = font.render(f"LV {self.player.level}", True, (255, 255, 0))
+        self.display_surface.blit(lvl_txt, (x, y - 22))
+
     def show_game_over(self):
         font = pygame.font.SysFont(None,120)
         txt = font.render("GAME OVER", True, (255,0,0))
@@ -152,6 +333,59 @@ class Game:
         self.display_surface.blit(txt, r)
         pygame.display.update()
         pygame.time.delay(2000)
+
+    def show_class_menu(self, screen):      # ← เพิ่ม self
+        font = pygame.font.SysFont(None, 70)
+        knight_btn  = pygame.Rect(0, 0, 300, 90)
+        knight_btn.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 - 120)
+        wizard_btn = pygame.Rect(0, 0, 300, 90);
+        wizard_btn.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+        judiciar_btn = pygame.Rect(0, 0, 300, 90);
+        judiciar_btn.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2 + 120)
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if knight_btn.collidepoint(event.pos):   return "knight"
+                    if wizard_btn.collidepoint(event.pos):   return "wizard"
+                    if judiciar_btn.collidepoint(event.pos): return "judiciar"
+
+            screen.fill((25, 25, 25))
+            pygame.draw.rect(screen, (180, 180, 180), knight_btn);
+            screen.blit(font.render("Knight", True, (0, 0, 0)), knight_btn.move(65, 15))
+            pygame.draw.rect(screen, (180, 180, 180), wizard_btn);
+            screen.blit(font.render("Wizard", True, (0, 0, 0)), wizard_btn.move(65, 15))
+            pygame.draw.rect(screen, (180, 180, 180), judiciar_btn);
+            screen.blit(font.render("Judiciar", True, (0, 0, 0)), judiciar_btn.move(50, 15))
+            pygame.display.update()
+
+    def _miniboss_progress(self) -> str:
+        killed = []
+        if getattr(self, "miniboss", None) and self.miniboss.is_dead:
+            killed.append("skeleton")
+        if getattr(self, "miniboss2", None) and self.miniboss2.is_dead:
+            killed.append("werewolf")
+        return ",".join(killed) or "none"
+
+    def _log_run(self, victory: bool):
+        secs = (pygame.time.get_ticks() - self.start_time) // 1000
+        row = [
+            self.player_name,
+            secs,
+            self.player.job,  # ‘soldier’ หากไม่เคยเปลี่ยนคลาส
+            self.player.level,
+            self._miniboss_progress(),
+            int(victory)  # 1 ถ้าชนะ, 0 ถ้าตาย
+        ]
+
+        write_header = not os.path.exists(CSV_PATH)
+        with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if write_header:
+                w.writerow(["Player", "Play_Time_Sec", "Class", "Level",
+                            "Miniboss_Killed", "Beat_Final_Boss"])
+            w.writerow(row)
 
 def show_menu(screen):
     """ แสดงหน้าเมนูหลัก มีตัวเลือก Play, Leaderboard, Quit """
@@ -270,9 +504,9 @@ if __name__ == '__main__':
     choic, player_name = show_menu(screen)
 
     if choic == 'play':
-        game = Game()
-        print(f"Starting game with player name: {player_name}")
+        game = Game(player_name)  # ⬅ ส่งชื่อเข้าไป
         game.run()
+
     else:
         pygame.quit()
         sys.exit()
