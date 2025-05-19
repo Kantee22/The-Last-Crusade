@@ -32,7 +32,7 @@
 ## 🎮 Controls
 
 | Action         | Control           |
-|----------------| ----------------- |
+| -------------- | ----------------- |
 | Move Up        | `W` / `↑`         |
 | Move Down      | `S` / `↓`         |
 | Move Left      | `A` / `←`         |
@@ -86,3 +86,15 @@ python main.py
 * 🗺️ **Tiled Map Integration:** Ground, object, and collision layers.
 * 🏆 **Leaderboard (coming soon):** Placeholder for future feature.
 * ⚡ **Quick Play Loop:** Fast-paced gameplay and replayability.
+
+---
+
+## 📚 References & Inspiration
+
+This project was built by extending and refining concepts demonstrated in the following YouTube tutorial:
+
+**"Python Game Development – Create a 2D Survival Game with Pygame"**
+by **Clear Code**
+Link: [https://youtu.be/8OMghdHP-zs?si=Z1yK0xaqPYgc2zLo](https://youtu.be/8OMghdHP-zs?si=Z1yK0xaqPYgc2zLo)
+
+---
